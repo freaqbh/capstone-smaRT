@@ -1,0 +1,81 @@
+# ──────────────────────────────────────────────
+#  smaRT Capstone — Root .gitignore
+# ──────────────────────────────────────────────
+
+# ─── OS Generated ────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ─── IDE / Editor ────────────────────────────
+.idea/
+.vscode/
+.cursor/
+.zed/
+.nova/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+*.sublime-project
+*.sublime-workspace
+
+# ─── Laravel / PHP (smaRT-backend) ──────────
+smaRT-backend/.env
+smaRT-backend/.env.backup
+smaRT-backend/.env.production
+smaRT-backend/vendor/
+smaRT-backend/node_modules/
+smaRT-backend/public/build/
+smaRT-backend/public/hot
+smaRT-backend/public/storage
+smaRT-backend/storage/*.key
+smaRT-backend/storage/pail/
+smaRT-backend/storage/logs/*.log
+smaRT-backend/.phpunit.cache/
+smaRT-backend/.phpunit.result.cache
+smaRT-backend/.phpactor.json
+smaRT-backend/auth.json
+smaRT-backend/_ide_helper.php
+smaRT-backend/Homestead.json
+smaRT-backend/Homestead.yaml
+
+# ─── Node / Frontend (future) ───────────────
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+.output/
+.cache/
+*.tsbuildinfo
+
+# ─── Logs ────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Environment / Secrets ──────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ─── Test / Coverage ────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Misc ────────────────────────────────────
+*.bak
+*.tmp
+*.temp

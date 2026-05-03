@@ -1,0 +1,484 @@
+openapi: 3.0.0
+info:
+  title: smaRT API Documentation
+  description: "Dokumentasi API untuk Sistem Tata Kelola RT Digital (smaRT) di Surabaya. Fokus pada layanan administrasi, keamanan (Panic Button), dan transparansi keuangan berbasis Hashchain."
+  contact:
+    name: Muhammad Abhinaya Al Faruqi
+    email: alfaruqiabhi111@gmail.com
+  version: 1.0.0
+servers:
+- url: https://virtserver.swaggerhub.com/institutetechnologys-c60/smaRT/1.0.0
+  description: SwaggerHub API Auto Mocking
+- url: http://localhost:8000/api
+  description: Local Development Server
+security:
+- bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      summary: Login Pengguna
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/auth_login_body"
+        required: true
+      responses:
+        "200":
+          description: Berhasil login
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200"
+      security: []
+  /auth/register:
+    post:
+      summary: Registrasi Pengguna Baru (Hanya Pengurus/Ketua)
+      description: Jalur pendaftaran akun warga atau pengurus baru yang dilakukan oleh pihak otoritas RT untuk menjaga validitas data kependudukan.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/auth_register_body"
+        required: true
+      responses:
+        "201":
+          description: Akun berhasil dibuat
+        "403":
+          description: Forbidden - Hanya pengurus yang boleh mendaftarkan akun baru.
+        "409":
+          description: Conflict - NIK sudah terdaftar dalam sistem.
+      security:
+      - bearerAuth: []
+  /surat/ajukan:
+    post:
+      summary: Pengajuan Surat Pengantar (Warga)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/surat_ajukan_body"
+        required: true
+      responses:
+        "201":
+          description: Surat berhasil diajukan
+    patch:
+      summary: Persetujuan / Penolakan Surat (Pengurus / Ketua)
+      description: Endpoint ini digunakan oleh pengurus atau ketua RT untuk menyetujui atau menolak surat yang telah diajukan oleh warga. Jika disetujui, field file_final dapat diisi dengan path dokumen surat yang sudah ditandatangani.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/surat_review_body"
+        required: true
+      responses:
+        "200":
+          description: Status surat berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PengajuanSurat"
+        "403":
+          description: Forbidden - Hanya pengurus atau ketua yang dapat menyetujui/menolak surat.
+        "404":
+          description: Not Found - Surat dengan ID tersebut tidak ditemukan.
+  /panic/trigger:
+    post:
+      summary: Aktivasi Panic Button (Warga)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/panic_trigger_body"
+      responses:
+        "200":
+          description: Sinyal darurat berhasil dikirim ke seluruh RT
+  /kas/input:
+    post:
+      summary: Pencatatan Kas Baru (Bendahara)
+      description: API ini akan memicu logika Hashchain untuk mengunci transaksi.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/kas_input_body"
+      responses:
+        "201":
+          description: Transaksi tercatat dan Hash berhasil digenerate
+  /kas/history:
+    get:
+      summary: Mendapatkan Riwayat Kas (Transparansi)
+      responses:
+        "200":
+          description: Daftar blok transaksi kas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Blockchain"
+  /broadcast:
+    get:
+      summary: Mendapatkan Riwayat Broadcast (Warga & Pengurus)
+      description: API ini digunakan oleh aplikasi mobile saat warga membuka menu "Pengumuman" untuk melihat daftar informasi dari RT. Mendukung pagination.
+      parameters:
+      - name: limit
+        in: query
+        description: Jumlah pengumuman yang ingin diambil (untuk pagination).
+        required: false
+        schema:
+          type: integer
+          default: 10
+      responses:
+        "200":
+          description: Berhasil mengambil daftar pengumuman
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Broadcast"
+    post:
+      summary: Mengirimkan informasi resmi dari dashboard web ke seluruh aplikasi mobile warga secara serentak.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/broadcast_body"
+        required: true
+      responses:
+        "201":
+          description: Broadcast berhasil dikirim dan notifikasi push dipicu.
+  /kas/monitor:
+    get:
+      summary: Monitoring Hash Terakhir (Real-time)
+      description: Endpoint ini dipanggil oleh aplikasi mobile secara berkala untuk mencocokkan hash terakhir di server dengan local cache (Local State Pinning).
+      responses:
+        "200":
+          description: Status hash terbaru dari server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifikasiLog"
+components:
+  schemas:
+    RT:
+      type: object
+      properties:
+        id_rt:
+          type: string
+          format: uuid
+          description: Primary key
+        nama_rt:
+          type: string
+        alamat:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Primary key
+        id_rt:
+          type: string
+          format: uuid
+          description: "Foreign key, references rt(id_rt)"
+        nama:
+          type: string
+        NIK:
+          type: string
+          description: Unique
+          example: "3578012345670001"
+        role:
+          type: string
+          enum:
+          - WARGA
+          - PENGURUS
+          - KETUA
+          - BENDAHARA
+        phone:
+          type: string
+          example: "08123456789"
+        password_hash:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    VerifikasiLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Primary key
+        user_id:
+          type: string
+          format: uuid
+          description: "Foreign key, references user(id)"
+        id_transaksi:
+          type: string
+          format: uuid
+          description: "Foreign key, nullable"
+        jenis_pengecekan:
+          type: string
+          enum:
+          - HASH_CHECK
+          - INTEGRITY_CHECK
+        status:
+          type: string
+          enum:
+          - VALID
+          - INVALID
+        hash_tersimpan:
+          type: string
+          maxLength: 64
+          description: "string(64)"
+        hash_terhitung:
+          type: string
+          maxLength: 64
+          description: "string(64)"
+        waktu_cek:
+          type: string
+          format: date-time
+    PanicLogs:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Primary key
+        user_id:
+          type: string
+          format: uuid
+          description: "Foreign key, references user(id)"
+        latitude:
+          type: string
+        longitude:
+          type: string
+          enum:
+          - EAST
+          - WEST
+        created_at:
+          type: string
+          format: date-time
+    PengajuanSurat:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Primary key
+        user_id:
+          type: string
+          format: uuid
+          description: "Foreign key, references user(id)"
+        nama_surat:
+          type: string
+        deskripsi_surat:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+        dokumen_pendukung:
+          type: string
+        file_final:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    Blockchain:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Primary key
+        bendahara_id:
+          type: string
+          format: uuid
+          description: "Foreign key, references user(id)"
+        jenis_kas:
+          type: string
+          enum:
+          - PEMASUKAN
+          - PENGELUARAN
+        nominal:
+          type: integer
+          format: int64
+          description: bigint
+          example: 50000
+        keterangan:
+          type: string
+          example: Iuran Kas Maret - Pak Budi
+        created_at:
+          type: string
+          format: date-time
+        previous_hash:
+          type: string
+          maxLength: 64
+          description: "string(64)"
+          example: 0000abc123...
+        current_hash:
+          type: string
+          maxLength: 64
+          description: "string(64)"
+          example: 0000def456...
+    Broadcast:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Primary key
+        pengurus_id:
+          type: string
+          format: uuid
+          description: "Foreign key, references user(id)"
+        judul:
+          type: string
+          example: Kerja Bakti Minggu Legi
+        isi_pesan:
+          type: string
+          example: Diharapkan seluruh warga berkumpul di balai RT pukul 07.00 WIB.
+        kategori:
+          type: string
+          enum:
+          - INFORMASI
+          - DARURAT
+          - KEGIATAN
+        created_at:
+          type: string
+          format: date-time
+    auth_login_body:
+      type: object
+      properties:
+        NIK:
+          type: string
+        password:
+          type: string
+    inline_response_200:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+    auth_register_body:
+      required:
+      - nama
+      - NIK
+      - password
+      - role
+      type: object
+      properties:
+        id_rt:
+          type: string
+          format: uuid
+          description: "Foreign key, references rt(id_rt)"
+        NIK:
+          type: string
+          example: "3578012345670001"
+        nama:
+          type: string
+          example: Budi Santoso
+        role:
+          type: string
+          enum:
+          - WARGA
+          - PENGURUS
+          - BENDAHARA
+        phone:
+          type: string
+          example: "08123456789"
+        password:
+          type: string
+          example: password123
+    panic_trigger_body:
+      type: object
+      properties:
+        latitude:
+          type: string
+        longitude:
+          type: string
+    kas_input_body:
+      type: object
+      properties:
+        bendahara_id:
+          type: string
+          format: uuid
+        nominal:
+          type: integer
+          format: int64
+        keterangan:
+          type: string
+        jenis_kas:
+          type: string
+          enum:
+          - PEMASUKAN
+          - PENGELUARAN
+    broadcast_body:
+      type: object
+      properties:
+        pengurus_id:
+          type: string
+          format: uuid
+        judul:
+          type: string
+        isi_pesan:
+          type: string
+        kategori:
+          type: string
+          enum:
+          - INFORMASI
+          - DARURAT
+          - KEGIATAN
+    surat_ajukan_body:
+      required:
+      - nama_surat
+      - deskripsi_surat
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: "ID warga yang mengajukan surat"
+        nama_surat:
+          type: string
+          example: Surat Pengantar KTP
+        deskripsi_surat:
+          type: string
+          example: Pengajuan surat pengantar untuk pembuatan KTP baru.
+        dokumen_pendukung:
+          type: string
+          description: "Path atau URL file dokumen pendukung (opsional)"
+    surat_review_body:
+      required:
+      - id
+      - status
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "ID pengajuan surat yang akan di-review"
+        status:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+          description: "Status persetujuan surat"
+        file_final:
+          type: string
+          description: "Path atau URL file surat final yang sudah ditandatangani (opsional, diisi jika APPROVED)"
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
