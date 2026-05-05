@@ -5,6 +5,9 @@ use App\Http\Controllers\BroadcastController;
 use App\Http\Controllers\KasController;
 use App\Http\Controllers\PanicController;
 use App\Http\Controllers\SuratController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\WargaController;
+use App\Http\Controllers\LogController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -25,6 +28,18 @@ Route::prefix('auth')->group(function () {
 // ─── Protected (JWT Required) ───────────────────────────────────
 Route::middleware('auth:api')->group(function () {
 
+    // Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->middleware('role:PENGURUS,KETUA,BENDAHARA');
+
+    // Warga Management
+    Route::prefix('warga')->group(function () {
+        Route::get('/', [WargaController::class, 'index'])
+            ->middleware('role:PENGURUS,KETUA');
+        Route::delete('/{id}', [WargaController::class, 'destroy'])
+            ->middleware('role:PENGURUS,KETUA');
+    });
+
     // Auth management
     Route::prefix('auth')->group(function () {
         Route::post('/register', [AuthController::class, 'register'])
@@ -35,15 +50,21 @@ Route::middleware('auth:api')->group(function () {
 
     // Surat Pengantar
     Route::prefix('surat')->group(function () {
+        Route::get('/', [SuratController::class, 'index'])
+            ->middleware('role:PENGURUS,KETUA');
         Route::post('/ajukan', [SuratController::class, 'store'])
             ->middleware('role:WARGA');
         Route::patch('/ajukan', [SuratController::class, 'review'])
             ->middleware('role:PENGURUS,KETUA');
     });
 
-    // Panic Button
-    Route::post('/panic/trigger', [PanicController::class, 'trigger'])
-        ->middleware('role:WARGA');
+    // Panic Button / Laporan Darurat
+    Route::prefix('panic')->group(function () {
+        Route::get('/', [PanicController::class, 'index'])
+            ->middleware('role:PENGURUS,KETUA');
+        Route::post('/trigger', [PanicController::class, 'trigger'])
+            ->middleware('role:WARGA');
+    });
 
     // Kas / Blockchain
     Route::prefix('kas')->group(function () {
@@ -56,5 +77,9 @@ Route::middleware('auth:api')->group(function () {
     // Broadcast
     Route::get('/broadcast', [BroadcastController::class, 'index']);
     Route::post('/broadcast', [BroadcastController::class, 'store'])
+        ->middleware('role:PENGURUS,KETUA');
+
+    // System Activity Logs
+    Route::get('/log', [LogController::class, 'index'])
         ->middleware('role:PENGURUS,KETUA');
 });

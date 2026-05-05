@@ -10,6 +10,17 @@ use Illuminate\Support\Facades\Validator;
 class PanicController extends Controller
 {
     /**
+     * GET /panic
+     *
+     * Retrieve all panic button logs.
+     */
+    public function index(): JsonResponse
+    {
+        $logs = PanicLog::with('user:id,nama,phone')->orderBy('created_at', 'desc')->get();
+        return response()->json(['data' => $logs]);
+    }
+
+    /**
      * POST /panic/trigger
      *
      * Warga activates the panic button, sending location data.
