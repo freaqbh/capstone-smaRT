@@ -2,19 +2,22 @@
 
 > **Base URL:** `http://localhost:8000/api`
 > **Auth:** JWT Bearer Token (header `Authorization: Bearer <token>`)
-> **Content-Type:** `application/json`
+> **Content-Type:** `application/json` (kecuali upload file menggunakan `multipart/form-data`)
 
 ---
 
 ## 📑 Daftar Isi
 
 1. [Autentikasi](#1-autentikasi)
-2. [Surat Pengantar](#2-surat-pengantar)
-3. [Panic Button](#3-panic-button)
-4. [Kas / Blockchain](#4-kas--blockchain)
-5. [Broadcast](#5-broadcast)
-6. [Error Responses](#6-error-responses-global)
-7. [Data Models](#7-data-models)
+2. [Dashboard](#2-dashboard)
+3. [Manajemen Warga](#3-manajemen-warga)
+4. [Surat Pengantar](#4-surat-pengantar)
+5. [Panic Button](#5-panic-button)
+6. [Kas / Blockchain](#6-kas--blockchain)
+7. [Broadcast](#7-broadcast)
+8. [Log Aktivitas Sistem](#8-log-aktivitas-sistem)
+9. [Error Responses](#9-error-responses-global)
+10. [Data Models](#10-data-models)
 
 ---
 
@@ -195,9 +198,115 @@
 
 ---
 
-## 2. Surat Pengantar
+## 2. Dashboard
 
-### 2.1 Ajukan Surat
+### 2.1 Get Dashboard Data
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **URL** | `/api/dashboard` |
+| **Auth** | ✅ JWT |
+| **Role** | `PENGURUS`, `KETUA` |
+
+**Request Body:** Tidak ada
+
+**✅ Success Response (200):**
+
+```json
+{
+  "message": "Dashboard data retrieved successfully",
+  "data": {
+    "users": { "warga": 150, "pengurus": 5, "total": 155 },
+    "surat": { "total": 10, "pending": 2, "diproses": 3, "selesai": 4, "ditolak": 1 },
+    "kas_summary": { "saldo": 1000000 },
+    "recent_activities": [ ],
+    "recent_surat": [ ],
+    "recent_agenda": [ ],
+    "laporan_warga": [ ],
+    "blocks": [ ]
+  }
+}
+```
+
+---
+
+## 3. Manajemen Warga
+
+### 7.1 Daftar Warga
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **URL** | `/api/warga` |
+| **Auth** | ✅ JWT |
+| **Role** | `PENGURUS`, `KETUA` |
+
+**✅ Success Response (200):**
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "nama": "Siti Aminah",
+      "NIK": "3201...",
+      "role": "WARGA",
+      "phone": "0819...",
+      "rt": { "id_rt": "uuid", "nama_rt": "RT 01" }
+    }
+  ]
+}
+```
+
+### 3.2 Hapus Warga
+
+| | |
+|---|---|
+| **Method** | `DELETE` |
+| **URL** | `/api/warga/{id}` |
+| **Auth** | ✅ JWT |
+| **Role** | `PENGURUS`, `KETUA` |
+
+**✅ Success Response (200):**
+
+```json
+{
+  "message": "Akun warga berhasil dihapus."
+}
+```
+
+---
+
+## 4. Surat Pengantar
+
+### 6.1 Lihat Daftar Pengajuan Surat
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **URL** | `/api/surat` |
+| **Auth** | ✅ JWT |
+| **Role** | `PENGURUS`, `KETUA` |
+
+**✅ Success Response (200):**
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "nama_surat": "Surat Keterangan Usaha",
+      "status": "PENDING",
+      "user": { "nama": "Budi" }
+    }
+  ]
+}
+```
+
+---
+
+### 6.2 Ajukan Surat
 
 | | |
 |---|---|
@@ -205,22 +314,15 @@
 | **URL** | `/api/surat/ajukan` |
 | **Auth** | ✅ JWT |
 | **Role** | `WARGA` |
+| **Content-Type** | `multipart/form-data` |
 
-**Request Body:**
-
-```json
-{
-  "nama_surat": "Surat Keterangan Domisili",
-  "deskripsi_surat": "Untuk keperluan administrasi kantor",
-  "dokumen_pendukung": "https://example.com/ktp_scan.pdf"
-}
-```
+**Request Body (FormData):**
 
 | Field | Type | Required | Keterangan |
 |---|---|---|---|
 | `nama_surat` | string | ✅ | Maks 255 karakter |
 | `deskripsi_surat` | string | ✅ | Deskripsi kebutuhan surat |
-| `dokumen_pendukung` | string | ❌ | URL/path file pendukung |
+| `dokumen_pendukung` | file | ❌ | File lampiran pendukung (PDF, JPG, PNG) |
 
 **✅ Success Response (201):**
 
@@ -242,30 +344,24 @@
 
 ---
 
-### 2.2 Review Surat (Approve / Reject)
+### 6.3 Review Surat (Approve / Reject)
 
 | | |
 |---|---|
-| **Method** | `PATCH` |
+| **Method** | `POST` (dengan `_method=PATCH`) |
 | **URL** | `/api/surat/ajukan` |
 | **Auth** | ✅ JWT |
 | **Role** | `PENGURUS`, `KETUA` |
+| **Content-Type** | `multipart/form-data` |
 
-**Request Body:**
-
-```json
-{
-  "id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
-  "status": "APPROVED",
-  "file_final": "https://example.com/surat_final.pdf"
-}
-```
+**Request Body (FormData):**
 
 | Field | Type | Required | Keterangan |
 |---|---|---|---|
+| `_method` | string | ✅ | Harus diisi `PATCH` |
 | `id` | uuid | ✅ | ID surat di tabel `pengajuan_surat` |
 | `status` | enum | ✅ | `APPROVED` atau `REJECTED` |
-| `file_final` | string | ❌ | URL file surat yang sudah jadi |
+| `file_final` | file | ❌ | File surat hasil jadi (PDF/JPG/PNG) |
 
 **✅ Success Response (200):**
 
@@ -295,9 +391,9 @@
 
 ---
 
-## 3. Panic Button
+## 5. Panic Button
 
-### 3.1 Trigger Panic
+### 7.1 Trigger Panic
 
 | | |
 |---|---|
@@ -343,9 +439,41 @@
 
 ---
 
-## 4. Kas / Blockchain
 
-### 4.1 Input Transaksi Kas
+### 7.2 Lihat Daftar Panic Log (SOS)
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **URL** | `/api/panic` |
+| **Auth** | ✅ JWT |
+| **Role** | `PENGURUS`, `KETUA` |
+
+**✅ Success Response (200):**
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "latitude": "-6.200000",
+      "longitude": "106.816666",
+      "created_at": "2026-05-03T10:35:00.000000Z",
+      "user": {
+        "id": "uuid",
+        "nama": "Budi Santoso",
+        "phone": "08123456789"
+      }
+    }
+  ]
+}
+```
+
+---
+
+## 6. Kas / Blockchain
+
+### 6.1 Input Transaksi Kas
 
 | | |
 |---|---|
@@ -390,7 +518,7 @@
 
 ---
 
-### 4.2 Riwayat Kas (History)
+### 6.2 Riwayat Kas (History)
 
 | | |
 |---|---|
@@ -429,7 +557,7 @@
 
 ---
 
-### 4.3 Monitor Integritas Hashchain
+### 6.3 Monitor Integritas Hashchain
 
 | | |
 |---|---|
@@ -490,9 +618,9 @@
 
 ---
 
-## 5. Broadcast
+## 7. Broadcast
 
-### 5.1 Lihat Broadcast
+### 7.1 Lihat Broadcast
 
 | | |
 |---|---|
@@ -535,7 +663,7 @@
 
 ---
 
-### 5.2 Kirim Broadcast
+### 7.2 Kirim Broadcast
 
 | | |
 |---|---|
@@ -578,7 +706,40 @@
 
 ---
 
-## 6. Error Responses (Global)
+---
+
+## 8. Log Aktivitas Sistem
+
+### 8.1 Lihat Log Sistem
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **URL** | `/api/log` |
+| **Auth** | ✅ JWT |
+| **Role** | `PENGURUS`, `KETUA` |
+
+**✅ Success Response (200):**
+
+```json
+{
+  "data": [
+    {
+      "id": "kas_1",
+      "icon": "✅",
+      "color": "green",
+      "title": "Transaksi kas",
+      "tag": "+Rp 500.000",
+      "desc": "Pencatat: Ahmad Bendahara - Iuran Warga",
+      "created_at": "2026-05-03T10:40:00.000000Z"
+    }
+  ]
+}
+```
+
+---
+
+## 9. Error Responses (Global)
 
 ### Validasi Gagal (422)
 
@@ -614,7 +775,7 @@ Jika user tidak memiliki role yang sesuai untuk endpoint:
 
 ---
 
-## 7. Data Models
+## 10. Data Models
 
 ### User
 
@@ -708,14 +869,20 @@ waktu_cek        : timestamp
 | 2 | `POST` | `/api/auth/register` | PENGURUS, KETUA | Daftarkan user baru |
 | 3 | `POST` | `/api/auth/logout` | Semua | Invalidate JWT token |
 | 4 | `POST` | `/api/auth/refresh` | Semua | Refresh JWT token |
-| 5 | `POST` | `/api/surat/ajukan` | WARGA | Ajukan surat pengantar |
-| 6 | `PATCH` | `/api/surat/ajukan` | PENGURUS, KETUA | Approve/reject surat |
-| 7 | `POST` | `/api/panic/trigger` | WARGA | Kirim sinyal darurat |
-| 8 | `POST` | `/api/kas/input` | BENDAHARA | Catat transaksi kas |
-| 9 | `GET` | `/api/kas/history` | Semua | Lihat riwayat transaksi |
-| 10 | `GET` | `/api/kas/monitor` | Semua | Cek integritas hashchain |
-| 11 | `GET` | `/api/broadcast` | Semua | Lihat daftar broadcast |
-| 12 | `POST` | `/api/broadcast` | PENGURUS, KETUA | Kirim broadcast baru |
+| 5 | `GET` | `/api/dashboard` | PENGURUS, KETUA | Lihat data dashboard admin |
+| 6 | `GET` | `/api/warga` | PENGURUS, KETUA | Lihat daftar warga |
+| 7 | `DELETE` | `/api/warga/{id}` | PENGURUS, KETUA | Hapus akun warga |
+| 8 | `GET` | `/api/surat` | PENGURUS, KETUA | Lihat daftar pengajuan surat |
+| 9 | `POST` | `/api/surat/ajukan` | WARGA | Ajukan surat pengantar (multipart) |
+| 10 | `PATCH` | `/api/surat/ajukan` | PENGURUS, KETUA | Approve/reject & upload surat (multipart) |
+| 11 | `GET` | `/api/panic` | PENGURUS, KETUA | Lihat riwayat panic log |
+| 12 | `POST` | `/api/panic/trigger` | WARGA | Kirim sinyal darurat |
+| 13 | `POST` | `/api/kas/input` | BENDAHARA | Catat transaksi kas |
+| 14 | `GET` | `/api/kas/history` | Semua | Lihat riwayat transaksi |
+| 15 | `GET` | `/api/kas/monitor` | Semua | Cek integritas hashchain |
+| 16 | `GET` | `/api/broadcast` | Semua | Lihat daftar broadcast |
+| 17 | `POST` | `/api/broadcast` | PENGURUS, KETUA | Kirim broadcast baru |
+| 18 | `GET` | `/api/log` | PENGURUS, KETUA | Lihat daftar aktivitas sistem |
 
 ---
 
