@@ -7,6 +7,8 @@ use App\Http\Controllers\PanicController;
 use App\Http\Controllers\SuratController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\WargaController;
+use App\Http\Controllers\FcmTokenController;
+use App\Http\Controllers\LaporanWargaController;
 use App\Http\Controllers\LogController;
 use Illuminate\Support\Facades\Route;
 
@@ -56,6 +58,7 @@ Route::middleware('auth:api')->group(function () {
             ->middleware('role:WARGA');
         Route::patch('/ajukan', [SuratController::class, 'review'])
             ->middleware('role:PENGURUS,KETUA');
+        Route::get('/{user}/riwayat', [SuratController::class, 'riwayat']);
     });
 
     // Panic Button / Laporan Darurat
@@ -78,6 +81,21 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/broadcast', [BroadcastController::class, 'index']);
     Route::post('/broadcast', [BroadcastController::class, 'store'])
         ->middleware('role:PENGURUS,KETUA');
+
+    // Laporan Warga
+    Route::prefix('laporan')->group(function () {
+        Route::get('/', [LaporanWargaController::class, 'index'])
+            ->middleware('role:PENGURUS,KETUA');
+        Route::post('/', [LaporanWargaController::class, 'store'])
+            ->middleware('role:WARGA');
+        Route::patch('/{id}/status', [LaporanWargaController::class, 'updateStatus'])
+            ->middleware('role:PENGURUS,KETUA');
+        Route::get('/{user}/riwayat', [LaporanWargaController::class, 'riwayat']);
+    });
+
+    // FCM Token
+    Route::post('fcm/token', [FcmTokenController::class, 'store']);
+    Route::delete('fcm/token', [FcmTokenController::class, 'destroy']);
 
     // System Activity Logs
     Route::get('/log', [LogController::class, 'index'])

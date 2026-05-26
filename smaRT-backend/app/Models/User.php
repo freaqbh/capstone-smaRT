@@ -97,4 +97,14 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(VerifikasiLog::class, 'user_id', 'id');
     }
+
+    public function laporanWarga(): HasMany
+    {
+        return $this->hasMany(LaporanWarga::class, 'user_id', 'id');
+    }
+
+    public function fcmTokens(): HasMany
+    {
+        return $this->hasMany(FcmToken::class, 'user_id', 'id');
+    }
 }

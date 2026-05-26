@@ -18,10 +18,14 @@ class Broadcast extends Model
         'judul',
         'isi_pesan',
         'kategori',
+        'tanggal_kegiatan',
+        'waktu_kegiatan',
+        'lokasi',
     ];
 
     protected $casts = [
-        'created_at' => 'datetime',
+        'tanggal_kegiatan' => 'date',
+        'created_at'       => 'datetime',
     ];
 
     public function pengurus(): BelongsTo

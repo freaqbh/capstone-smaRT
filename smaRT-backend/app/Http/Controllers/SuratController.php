@@ -3,12 +3,43 @@
 namespace App\Http\Controllers;
 
 use App\Models\PengajuanSurat;
+use App\Models\User;
+use App\Services\FcmNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class SuratController extends Controller
 {
+    /**
+     * GET /surat/{user}/riwayat
+     *
+     * Get the document proposal history for a specific user.
+     */
+    public function riwayat(string $user): JsonResponse
+    {
+        $targetUser = User::find($user);
+
+        if (!$targetUser) {
+            return response()->json([
+                'message' => 'User tidak ditemukan.',
+            ], 404);
+        }
+
+        $riwayat = PengajuanSurat::where('user_id', $user)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'message' => 'Riwayat pengajuan surat berhasil diambil.',
+            'user'    => [
+                'id'   => $targetUser->id,
+                'nama' => $targetUser->nama,
+            ],
+            'data'    => $riwayat,
+        ]);
+    }
+
     /**
      * GET /surat
      *
@@ -61,7 +92,7 @@ class SuratController extends Controller
      *
      * Pengurus / Ketua approves or rejects a submitted letter.
      */
-    public function review(Request $request): JsonResponse
+    public function review(Request $request, FcmNotificationService $fcm): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'id' => 'required|uuid|exists:pengajuan_surat,id',
@@ -89,6 +120,14 @@ class SuratController extends Controller
         $surat->update([
             'status' => $request->status,
             'file_final' => $fileFinalPath,
+        ]);
+
+        // Kirim notifikasi ke warga tentang status surat
+        $statusText = $request->status === 'APPROVED' ? 'disetujui ✅' : 'ditolak ❌';
+        $fcm->sendToUser($surat->user_id, 'Update Surat', "Surat \"{$surat->nama_surat}\" telah {$statusText}.", [
+            'type'     => 'surat',
+            'surat_id' => $surat->id,
+            'status'   => $request->status,
         ]);
 
         return response()->json([

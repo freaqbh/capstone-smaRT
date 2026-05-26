@@ -53,7 +53,9 @@ WARGA_RESP=$(curl -s -X POST "$BASE/auth/login" \
   -d '{"NIK":"3578010101010003","password":"password123"}')
 echo "$WARGA_RESP" | python3 -m json.tool 2>/dev/null || echo "$WARGA_RESP"
 WARGA_TOKEN=$(echo "$WARGA_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])" 2>/dev/null)
+WARGA_ID=$(echo "$WARGA_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['id'])" 2>/dev/null)
 echo -e "${GREEN}WARGA TOKEN: ${WARGA_TOKEN:0:40}...${NC}"
+echo -e "${GREEN}WARGA ID: $WARGA_ID${NC}"
 
 # ──────────────────────────────────────────────────────────────
 # 4. LOGIN — Wrong password (should fail 401)
@@ -171,7 +173,7 @@ curl -s -X POST "$BASE/broadcast" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer $KETUA_TOKEN" \
-  -d '{"judul":"Kerja Bakti Minggu Legi","isi_pesan":"Diharapkan seluruh warga berkumpul di balai RT pukul 07.00 WIB.","kategori":"KEGIATAN"}' | python3 -m json.tool
+  -d '{"judul":"Kerja Bakti Minggu Legi","isi_pesan":"Diharapkan seluruh warga berkumpul di balai RT pukul 07.00 WIB.","kategori":"KEGIATAN","tanggal_kegiatan":"2026-06-01","waktu_kegiatan":"07:00","lokasi":"Balai RT"}' | python3 -m json.tool
 
 # ──────────────────────────────────────────────────────────────
 # 16. BROADCAST — Get list
@@ -182,9 +184,56 @@ curl -s -X GET "$BASE/broadcast?limit=10" \
   -H "Authorization: Bearer $WARGA_TOKEN" | python3 -m json.tool
 
 # ──────────────────────────────────────────────────────────────
-# 17. REFRESH TOKEN
+# 17. LAPORAN WARGA — WARGA submits a report
 # ──────────────────────────────────────────────────────────────
-print_test "17. POST /auth/refresh (Refresh WARGA token — expect 200)"
+print_test "17. POST /laporan (WARGA submits report — expect 201)"
+LAPORAN_RESP=$(curl -s -X POST "$BASE/laporan" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer $WARGA_TOKEN" \
+  -d '{"kategori_masalah":"Infrastruktur","deskripsi":"Jalan berlubang di depan balai RT.","lokasi":"Depan Balai RT"}')
+echo "$LAPORAN_RESP" | python3 -m json.tool 2>/dev/null || echo "$LAPORAN_RESP"
+LAPORAN_ID=$(echo "$LAPORAN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])" 2>/dev/null)
+echo -e "${GREEN}LAPORAN ID: $LAPORAN_ID${NC}"
+
+# ──────────────────────────────────────────────────────────────
+# 18. LAPORAN WARGA — Get list
+# ──────────────────────────────────────────────────────────────
+print_test "18. GET /laporan (List reports — expect 200)"
+curl -s -X GET "$BASE/laporan" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer $KETUA_TOKEN" | python3 -m json.tool
+
+# ──────────────────────────────────────────────────────────────
+# 19. LAPORAN WARGA — Update status
+# ──────────────────────────────────────────────────────────────
+print_test "19. PATCH /laporan/{id}/status (KETUA updates report — expect 200)"
+curl -s -X PATCH "$BASE/laporan/$LAPORAN_ID/status" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer $KETUA_TOKEN" \
+  -d '{"status":"SELESAI"}' | python3 -m json.tool
+
+# ──────────────────────────────────────────────────────────────
+# 20. LAPORAN WARGA — Get riwayat
+# ──────────────────────────────────────────────────────────────
+print_test "20. GET /laporan/{user_id}/riwayat (WARGA report history — expect 200)"
+curl -s -X GET "$BASE/laporan/$WARGA_ID/riwayat" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer $WARGA_TOKEN" | python3 -m json.tool
+
+# ──────────────────────────────────────────────────────────────
+# 21. SURAT WARGA - Get Riwayat
+# ──────────────────────────────────────────────────────────────
+print_test "21. GET /surat/{user_id}/riwayat (WARGA surat history — expect 200)"
+curl -s -X GET "$BASE/surat/$WARGA_ID/riwayat" \  
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer $WARGA_TOKEN" | python3 -m json.tool
+
+# ──────────────────────────────────────────────────────────────
+# 22. REFRESH TOKEN
+# ──────────────────────────────────────────────────────────────
+print_test "22. POST /auth/refresh (Refresh WARGA token — expect 200)"
 REFRESH_RESP=$(curl -s -X POST "$BASE/auth/refresh" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer $WARGA_TOKEN")
@@ -193,22 +242,22 @@ NEW_WARGA_TOKEN=$(echo "$REFRESH_RESP" | python3 -c "import sys,json; print(json
 echo -e "${GREEN}NEW WARGA TOKEN: ${NEW_WARGA_TOKEN:0:40}...${NC}"
 
 # ──────────────────────────────────────────────────────────────
-# 18. LOGOUT
+# 23. LOGOUT
 # ──────────────────────────────────────────────────────────────
-print_test "18. POST /auth/logout (Logout WARGA — expect 200)"
+print_test "23. POST /auth/logout (Logout WARGA — expect 200)"
 curl -s -X POST "$BASE/auth/logout" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer $NEW_WARGA_TOKEN" | python3 -m json.tool
 
 # ──────────────────────────────────────────────────────────────
-# 19. ACCESS AFTER LOGOUT (should fail 401)
+# 24. ACCESS AFTER LOGOUT (should fail 401)
 # ──────────────────────────────────────────────────────────────
-print_test "19. GET /broadcast (After logout — expect 401)"
+print_test "24. GET /broadcast (After logout — expect 401)"
 curl -s -X GET "$BASE/broadcast" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer $NEW_WARGA_TOKEN" | python3 -m json.tool
 
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  ALL 19 TESTS COMPLETED${NC}"
+echo -e "${GREEN}  ALL 23 TESTS COMPLETED${NC}"
 echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"

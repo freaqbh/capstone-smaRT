@@ -17,6 +17,9 @@ return new class extends Migration
             $table->string('judul');
             $table->text('isi_pesan');
             $table->enum('kategori', ['INFORMASI', 'DARURAT', 'KEGIATAN']);
+            $table->date('tanggal_kegiatan')->nullable();
+            $table->string('waktu_kegiatan')->nullable();
+            $table->string('lokasi')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
             $table->foreign('pengurus_id')->references('id')->on('users')->onDelete('cascade');

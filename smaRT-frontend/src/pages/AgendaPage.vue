@@ -11,7 +11,10 @@ const submitLoading = ref(false)
 const form = ref({
   judul: '',
   kategori: 'INFORMASI' as 'INFORMASI' | 'DARURAT' | 'KEGIATAN',
-  isi_pesan: ''
+  isi_pesan: '',
+  tanggal_kegiatan: '',
+  waktu_kegiatan: '',
+  lokasi: ''
 })
 
 async function fetchAgenda() {
@@ -31,7 +34,7 @@ async function handleCreate() {
   try {
     await broadcastApi.send(form.value)
     showModal.value = false
-    form.value = { judul: '', kategori: 'INFORMASI', isi_pesan: '' }
+    form.value = { judul: '', kategori: 'INFORMASI', isi_pesan: '', tanggal_kegiatan: '', waktu_kegiatan: '', lokasi: '' }
     fetchAgenda()
   } catch (e: any) {
     alert(e.response?.data?.message || 'Gagal mengirim pengumuman')
@@ -104,6 +107,21 @@ onMounted(() => {
             </select>
           </div>
 
+          <template v-if="form.kategori === 'KEGIATAN'">
+            <div class="form-group">
+              <label>Tanggal Kegiatan</label>
+              <input v-model="form.tanggal_kegiatan" type="date" required class="input" />
+            </div>
+            <div class="form-group">
+              <label>Waktu Kegiatan</label>
+              <input v-model="form.waktu_kegiatan" type="time" required class="input" />
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label>Lokasi Kegiatan</label>
+              <input v-model="form.lokasi" type="text" required class="input" placeholder="Contoh: Balai RT 01" />
+            </div>
+          </template>
+
           <div class="form-group" style="grid-column: 1 / -1;">
             <label>Isi Pesan / Deskripsi</label>
             <textarea v-model="form.isi_pesan" required class="input" rows="4" placeholder="Tuliskan isi pesan pengumuman..."></textarea>
@@ -146,7 +164,14 @@ onMounted(() => {
             </td>
             <td class="font-medium text-primary">{{ agenda.judul }}</td>
             <td class="text-sm">{{ agenda.pengurus?.nama || 'Pengurus' }}</td>
-            <td class="text-sm text-muted desc-col">{{ agenda.isi_pesan }}</td>
+            <td class="text-sm text-muted desc-col">
+              <p>{{ agenda.isi_pesan }}</p>
+              <div v-if="agenda.kategori === 'KEGIATAN'" class="kegiatan-details mt-2">
+                <span class="detail-item">📅 {{ agenda.tanggal_kegiatan }}</span>
+                <span class="detail-item">⏰ {{ agenda.waktu_kegiatan }}</span>
+                <span class="detail-item">📍 {{ agenda.lokasi }}</span>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -266,5 +291,22 @@ textarea.input {
 }
 .modal-actions {
   display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;
+}
+.mt-2 { margin-top: 8px; }
+.kegiatan-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--bg-dark);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+.detail-item {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>

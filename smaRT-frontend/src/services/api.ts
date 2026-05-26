@@ -21,8 +21,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
-      // Try to refresh
+    // If the original request was already trying to refresh, don't loop
+    if (error.response?.status === 401 && error.config.url !== '/auth/refresh') {
       const token = localStorage.getItem('token')
       if (token && !error.config._retry) {
         error.config._retry = true
@@ -42,6 +42,11 @@ api.interceptors.response.use(
         localStorage.removeItem('user')
         window.location.href = '/login'
       }
+    } else if (error.response?.status === 401 && error.config.url === '/auth/refresh') {
+      // If refresh token fails, clear data and redirect
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
     }
     return Promise.reject(error)
   },
@@ -118,7 +123,7 @@ export const broadcastApi = {
   list(limit = 10) {
     return api.get('/broadcast', { params: { limit } })
   },
-  send(data: { judul: string; isi_pesan: string; kategori: 'INFORMASI' | 'DARURAT' | 'KEGIATAN' }) {
+  send(data: { judul: string; isi_pesan: string; kategori: 'INFORMASI' | 'DARURAT' | 'KEGIATAN'; tanggal_kegiatan?: string; waktu_kegiatan?: string; lokasi?: string }) {
     return api.post('/broadcast', data)
   },
 }
@@ -146,3 +151,32 @@ export const logApi = {
     return api.get('/log')
   },
 }
+
+// ─── Laporan Warga ───────────────────────────────────────
+export const laporanApi = {
+  list() {
+    return api.get('/laporan')
+  },
+  submit(data: FormData) {
+    return api.post('/laporan', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  updateStatus(id: string, status: 'DIPROSES' | 'SELESAI') {
+    return api.patch(`/laporan/${id}/status`, { status })
+  },
+  riwayat(userId: string) {
+    return api.get(`/laporan/${userId}/riwayat`)
+  },
+}
+
+// ─── FCM Token ───────────────────────────────────────────
+export const fcmApi = {
+  sendToken(token: string, deviceId: string) {
+    return api.post('/fcm/token', { token, device_id: deviceId })
+  },
+  deleteToken(deviceId: string) {
+    return api.delete('/fcm/token', { data: { device_id: deviceId } })
+  },
+}
+

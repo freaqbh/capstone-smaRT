@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Broadcast;
+use App\Services\FcmNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -33,12 +34,15 @@ class BroadcastController extends Controller
      *
      * Pengurus / Ketua sends a broadcast announcement to all residents.
      */
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, FcmNotificationService $fcm): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'judul' => 'required|string|max:255',
-            'isi_pesan' => 'required|string',
-            'kategori' => 'required|in:INFORMASI,DARURAT,KEGIATAN',
+            'judul'             => 'required|string|max:255',
+            'isi_pesan'         => 'required|string',
+            'kategori'          => 'required|in:INFORMASI,DARURAT,KEGIATAN',
+            'tanggal_kegiatan'  => 'nullable|required_if:kategori,KEGIATAN|date',
+            'waktu_kegiatan'    => 'nullable|required_if:kategori,KEGIATAN|string|max:100',
+            'lokasi'            => 'nullable|required_if:kategori,KEGIATAN|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -46,10 +50,20 @@ class BroadcastController extends Controller
         }
 
         $broadcast = Broadcast::create([
-            'pengurus_id' => auth()->id(),
-            'judul' => $request->judul,
-            'isi_pesan' => $request->isi_pesan,
-            'kategori' => $request->kategori,
+            'pengurus_id'      => auth()->id(),
+            'judul'            => $request->judul,
+            'isi_pesan'        => $request->isi_pesan,
+            'kategori'         => $request->kategori,
+            'tanggal_kegiatan' => $request->tanggal_kegiatan,
+            'waktu_kegiatan'   => $request->waktu_kegiatan,
+            'lokasi'           => $request->lokasi,
+        ]);
+
+        // Kirim push notification ke semua warga di RT
+        $rtId = auth()->user()->id_rt;
+        $fcm->sendToRT($rtId, $broadcast->judul, $broadcast->isi_pesan, [
+            'type'         => 'broadcast',
+            'broadcast_id' => $broadcast->id,
         ]);
 
         return response()->json([
