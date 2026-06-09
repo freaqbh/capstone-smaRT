@@ -1,0 +1,111 @@
+---
+# ┌──────────────────────────────────────────────────────────────┐
+# │  Rollback smaRT Backend                                      │
+# │                                                              │
+# │  Usage:                                                      │
+# │  ansible-playbook playbooks/rollback.yml                    │
+# │  ansible-playbook playbooks/rollback.yml \                  │
+# │    -e rollback_tag=rollback-20260609T120000                 │
+# └──────────────────────────────────────────────────────────────┘
+- name: Rollback smaRT Backend
+  hosts: all
+  become: true
+  become_user: "{{ deploy_user }}"
+
+  tasks:
+    # ── Find Available Rollback Images ───────────────────────────
+    - name: List available rollback images
+      ansible.builtin.shell: >
+        docker images --format '{{ '{{' }}.Tag{{ '}}' }}'
+        {{ docker_image_name }} | grep '^rollback-' | sort -r | head -5
+      register: rollback_images
+      changed_when: false
+      tags: [list]
+
+    - name: Display available rollback images
+      ansible.builtin.debug:
+        msg: |
+          Available rollback images:
+          {{ rollback_images.stdout_lines | to_nice_yaml }}
+      tags: [list]
+
+    # ── Determine Rollback Target ────────────────────────────────
+    - name: Set rollback tag (use provided or latest)
+      ansible.builtin.set_fact:
+        target_tag: "{{ rollback_tag | default(rollback_images.stdout_lines[0] | default('')) }}"
+      tags: [rollback]
+
+    - name: Verify rollback target exists
+      ansible.builtin.fail:
+        msg: |
+          ❌ No rollback image found!
+          Either specify a tag with: -e rollback_tag=<tag>
+          Or there are no previous deployments to rollback to.
+      when: target_tag == ""
+      tags: [rollback]
+
+    - name: Display rollback target
+      ansible.builtin.debug:
+        msg: "🔄 Rolling back to: {{ docker_image_name }}:{{ target_tag }}"
+      tags: [rollback]
+
+    # ── Perform Rollback ─────────────────────────────────────────
+    - name: Tag rollback image as latest
+      ansible.builtin.command: >
+        docker tag {{ docker_image_name }}:{{ target_tag }}
+        {{ docker_image_name }}:latest
+      changed_when: true
+      tags: [rollback]
+
+    - name: Restart app container with rollback image
+      ansible.builtin.command: >
+        docker compose -f {{ deploy_dir }}/docker-compose.yml
+        up -d --force-recreate app
+      changed_when: true
+      tags: [rollback]
+
+    - name: Wait for app to stabilize
+      ansible.builtin.pause:
+        seconds: 15
+      tags: [rollback]
+
+    # ── Verify Rollback ──────────────────────────────────────────
+    - name: Health check after rollback
+      ansible.builtin.uri:
+        url: "{{ health_check_url }}"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: health_check
+      retries: 5
+      delay: 10
+      until: health_check.status == 200
+      tags: [healthcheck]
+
+    # ── Restore Database (Optional) ──────────────────────────────
+    - name: List available database backups
+      ansible.builtin.shell: >
+        ls -t {{ backup_dir }}/db-backup-*.sql 2>/dev/null | head -5
+      register: db_backups
+      changed_when: false
+      tags: [db_restore]
+
+    - name: Display available database backups
+      ansible.builtin.debug:
+        msg: |
+          Available database backups (restore manually if needed):
+          {{ db_backups.stdout_lines | default(['No backups found']) | to_nice_yaml }}
+
+          To restore a backup manually:
+          docker compose -f {{ deploy_dir }}/docker-compose.yml exec -T db \
+            mysql -u root -p"$DB_ROOT_PASSWORD" < /path/to/backup.sql
+      tags: [db_restore]
+
+    - name: Display rollback success
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════╗
+          ║  ✅ Rollback Successful!              ║
+          ║  Image: {{ target_tag }}              ║
+          ╚══════════════════════════════════════╝
+      tags: [always]

@@ -21,7 +21,7 @@ COPY resources/ resources/
 RUN npm run build
 
 # ── Stage 3: Production image ───────────────────────────────────
-FROM php:8.3-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 # Install system deps + PHP extensions
 RUN apk add --no-cache \
@@ -54,11 +54,12 @@ RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/opcache.ini && \
     echo "opcache.max_accelerated_files=10000" >> /usr/local/etc/php/conf.d/opcache.ini && \
     echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
 
-# Configure PHP-FPM to listen on a socket
-RUN sed -i 's|listen = 127.0.0.1:9000|listen = /run/php-fpm.sock|' /usr/local/etc/php-fpm.d/www.conf && \
-    echo "listen.owner = nginx" >> /usr/local/etc/php-fpm.d/www.conf && \
-    echo "listen.group = nginx" >> /usr/local/etc/php-fpm.d/www.conf && \
-    echo "listen.mode = 0660" >> /usr/local/etc/php-fpm.d/www.conf
+# Configure PHP-FPM to listen on a socket (overriding defaults)
+RUN echo "[www]" > /usr/local/etc/php-fpm.d/zzz-custom.conf && \
+    echo "listen = /run/php-fpm.sock" >> /usr/local/etc/php-fpm.d/zzz-custom.conf && \
+    echo "listen.owner = nginx" >> /usr/local/etc/php-fpm.d/zzz-custom.conf && \
+    echo "listen.group = nginx" >> /usr/local/etc/php-fpm.d/zzz-custom.conf && \
+    echo "listen.mode = 0660" >> /usr/local/etc/php-fpm.d/zzz-custom.conf
 
 # Set PHP upload & memory limits
 RUN echo "upload_max_filesize = 20M" >> /usr/local/etc/php/conf.d/uploads.ini && \

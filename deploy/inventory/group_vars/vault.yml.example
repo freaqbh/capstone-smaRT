@@ -1,0 +1,22 @@
+---
+# ┌──────────────────────────────────────────────────────────────┐
+# │  Ansible Vault — TEMPLATE                                    │
+# │                                                              │
+# │  Copy this file to vault.yml and encrypt it:                │
+# │  ansible-vault encrypt group_vars/vault.yml                 │
+# │                                                              │
+# │  Fill in REAL values before encrypting!                     │
+# └──────────────────────────────────────────────────────────────┘
+
+# Database
+vault_db_root_password: "CHANGE_ME_strong_root_password"
+vault_db_password: "CHANGE_ME_strong_user_password"
+vault_db_database: "smart_backend"
+vault_db_username: "smart_user"
+
+# Laravel
+vault_app_key: "base64:GENERATE_WITH_php_artisan_key_generate"
+vault_jwt_secret: "GENERATE_WITH_php_artisan_jwt:secret"
+
+# Deploy user SSH public key (paste your public key here)
+vault_deploy_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGX7zPQlaFaTQZk0xqz0LTd20/uQMXNxf+PpRO1Wq4x5 alfaruqiabhi111@gmail.com"

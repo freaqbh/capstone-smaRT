@@ -1,0 +1,241 @@
+---
+# ┌──────────────────────────────────────────────────────────────┐
+# │  Setup Server — Run once on fresh VPS                        │
+# │                                                              │
+# │  Usage:                                                      │
+# │  ansible-playbook playbooks/setup-server.yml \               │
+# │    -u root --ask-pass                                       │
+# └──────────────────────────────────────────────────────────────┘
+- name: Setup VPS for smaRT Backend
+  hosts: all
+  become: true
+  # Override user to root for initial setup
+  vars:
+    ansible_user: root
+
+  tasks:
+    # ── System Update ────────────────────────────────────────────
+    - name: Update apt cache and upgrade packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        cache_valid_time: 3600
+      tags: [system]
+
+    - name: Install essential packages
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+          - ufw
+          - fail2ban
+          - htop
+          - unzip
+          - rsync
+          - git
+        state: present
+      tags: [system]
+
+    # ── Setup Swap (for low-RAM VPS) ─────────────────────────────
+    - name: Check if swap exists
+      ansible.builtin.command: swapon --show
+      register: swap_check
+      changed_when: false
+      tags: [swap]
+
+    - name: Create swap file (2GB)
+      ansible.builtin.command: |
+        fallocate -l 2G /swapfile
+      when: swap_check.stdout == ""
+      tags: [swap]
+
+    - name: Set swap file permissions
+      ansible.builtin.file:
+        path: /swapfile
+        mode: "0600"
+      when: swap_check.stdout == ""
+      tags: [swap]
+
+    - name: Make swap
+      ansible.builtin.command: mkswap /swapfile
+      when: swap_check.stdout == ""
+      tags: [swap]
+
+    - name: Enable swap
+      ansible.builtin.command: swapon /swapfile
+      when: swap_check.stdout == ""
+      tags: [swap]
+
+    - name: Add swap to fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "/swapfile none swap sw 0 0"
+        state: present
+      when: swap_check.stdout == ""
+      tags: [swap]
+
+    - name: Configure swappiness
+      ansible.posix.sysctl:
+        name: vm.swappiness
+        value: "10"
+        state: present
+        reload: true
+      tags: [swap]
+
+    # ── Create Deploy User ───────────────────────────────────────
+    - name: Create deploy user
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        create_home: true
+        state: present
+      tags: [user]
+
+    - name: Set up SSH key for deploy user
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ vault_deploy_ssh_public_key }}"
+        state: present
+      tags: [user]
+
+    - name: Allow deploy user passwordless sudo
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/deploy
+        line: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL"
+        create: true
+        mode: "0440"
+        validate: "visudo -cf %s"
+      tags: [user]
+
+    # ── Install Docker ───────────────────────────────────────────
+    - name: Add Docker GPG key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      tags: [docker]
+
+    - name: Add Docker APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+      tags: [docker]
+
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+      tags: [docker]
+
+    - name: Add deploy user to docker group
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+      tags: [docker]
+
+    - name: Enable and start Docker service
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+      tags: [docker]
+
+    # ── Firewall (UFW) ──────────────────────────────────────────
+    - name: Set UFW default deny incoming
+      community.general.ufw:
+        direction: incoming
+        default: deny
+      tags: [firewall]
+
+    - name: Set UFW default allow outgoing
+      community.general.ufw:
+        direction: outgoing
+        default: allow
+      tags: [firewall]
+
+    - name: Allow SSH
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+      tags: [firewall]
+
+    - name: Allow HTTP
+      community.general.ufw:
+        rule: allow
+        port: "80"
+        proto: tcp
+      tags: [firewall]
+
+    - name: Allow HTTPS
+      community.general.ufw:
+        rule: allow
+        port: "443"
+        proto: tcp
+      tags: [firewall]
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
+      tags: [firewall]
+
+    # ── Fail2Ban ────────────────────────────────────────────────
+    - name: Enable and start fail2ban
+      ansible.builtin.systemd:
+        name: fail2ban
+        enabled: true
+        state: started
+      tags: [security]
+
+    # ── Create Project Directories ───────────────────────────────
+    - name: Create project directory
+      ansible.builtin.file:
+        path: "{{ project_root }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_group }}"
+        mode: "0755"
+      tags: [project]
+
+    - name: Create backup directory
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_group }}"
+        mode: "0755"
+      tags: [project]
+
+    # ── SSH Hardening ────────────────────────────────────────────
+    - name: Disable root SSH login
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin no"
+      notify: Restart SSH
+      tags: [security]
+
+    - name: Disable password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+      notify: Restart SSH
+      tags: [security]
+
+  handlers:
+    - name: Restart SSH
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted

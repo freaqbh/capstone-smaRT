@@ -1,0 +1,31 @@
+---
+# ┌──────────────────────────────────────────────────────────────┐
+# │  Deployment Variables                                        │
+# └──────────────────────────────────────────────────────────────┘
+
+# Project
+project_name: smart-backend
+deploy_user: deploy
+deploy_group: deploy
+
+# Paths on the remote server
+project_root: "/home/{{ deploy_user }}/{{ project_name }}"
+deploy_dir: "{{ project_root }}/deploy"
+backend_dir: "{{ project_root }}/smaRT-backend"
+
+# Docker
+docker_compose_version: "v2.27.0"
+docker_image_name: "smart-backend"
+docker_image_tag: "latest"
+
+# App
+app_port: 80
+
+# Health check
+health_check_url: "http://localhost:{{ app_port }}/up"
+health_check_retries: 10
+health_check_delay: 10
+
+# Backup
+backup_dir: "/home/{{ deploy_user }}/backups"
+keep_releases: 3

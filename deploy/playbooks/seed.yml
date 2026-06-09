@@ -1,0 +1,23 @@
+---
+# ┌──────────────────────────────────────────────────────────────┐
+# │  Seed Database                                               │
+# │                                                              │
+# │  Usage:                                                      │
+# │  ansible-playbook playbooks/seed.yml --ask-vault-pass       │
+# └──────────────────────────────────────────────────────────────┘
+- name: Seed Database
+  hosts: all
+  become: true
+  become_user: "{{ deploy_user }}"
+
+  tasks:
+    - name: Run database seeders
+      ansible.builtin.command: >
+        docker compose -f {{ deploy_dir }}/docker-compose.yml
+        exec -T app php artisan db:seed --force
+      register: seed_result
+      changed_when: "'Seeding' in seed_result.stdout"
+
+    - name: Display seeding result
+      ansible.builtin.debug:
+        msg: "{{ seed_result.stdout_lines }}"

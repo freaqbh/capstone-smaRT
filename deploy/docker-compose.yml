@@ -1,0 +1,73 @@
+version: "3.8"
+
+services:
+  # ── MySQL Database ─────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: smart-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${DB_DATABASE}"
+      MYSQL_USER: "${DB_USERNAME}"
+      MYSQL_PASSWORD: "${DB_PASSWORD}"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:3306:3306"
+    networks:
+      - smart-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max-connections=200
+      --innodb-buffer-pool-size=256M
+
+  # ── smaRT Backend (Laravel) ───────────────────────────────────
+  app:
+    build:
+      context: ../smaRT-backend
+      dockerfile: Dockerfile
+    container_name: smart-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      PORT: 8000
+    ports:
+      - "${APP_PORT:-80}:8000"
+    volumes:
+      - app_storage:/var/www/html/storage
+      - firebase_creds:/var/www/html/storage/firebase-credentials
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - smart-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/up"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  mysql_data:
+    driver: local
+  app_storage:
+    driver: local
+  firebase_creds:
+    driver: local
+
+networks:
+  smart-network:
+    driver: bridge

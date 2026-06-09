@@ -79,3 +79,8 @@ coverage/
 *.bak
 *.tmp
 *.temp
+
+# ─── Deploy / Ansible ───────────────────────
+deploy/.env
+deploy/group_vars/vault.yml
+deploy/*.retry

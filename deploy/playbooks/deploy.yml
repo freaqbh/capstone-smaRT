@@ -1,0 +1,225 @@
+---
+# ┌──────────────────────────────────────────────────────────────┐
+# │  Deploy smaRT Backend                                        │
+# │                                                              │
+# │  Usage:                                                      │
+# │  ansible-playbook playbooks/deploy.yml                      │
+# │  ansible-playbook playbooks/deploy.yml --ask-vault-pass     │
+# └──────────────────────────────────────────────────────────────┘
+- name: Deploy smaRT Backend
+  hosts: all
+  become: true
+  become_user: "{{ deploy_user }}"
+
+  vars:
+    timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+    release_tag: "{{ docker_image_tag | default('latest') }}"
+
+  pre_tasks:
+    - name: Display deployment info
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════╗
+          ║  Deploying smaRT Backend             ║
+          ║  Time: {{ timestamp }}               ║
+          ║  Tag:  {{ release_tag }}              ║
+          ╚══════════════════════════════════════╝
+      tags: [always]
+
+  tasks:
+    - block:
+        # ── Step 1: Sync Source Code ─────────────────────────────────
+        - name: Sync backend source code to server
+          ansible.posix.synchronize:
+            src: "{{ playbook_dir }}/../../smaRT-backend/"
+            dest: "{{ backend_dir }}/"
+            delete: true
+            recursive: true
+            rsync_opts:
+              - "--exclude=.git"
+              - "--exclude=node_modules"
+              - "--exclude=vendor"
+              - "--exclude=storage/logs/*"
+              - "--exclude=storage/framework/cache/data/*"
+              - "--exclude=storage/framework/sessions/*"
+              - "--exclude=storage/framework/views/*"
+              - "--exclude=bootstrap/cache/*.php"
+              - "--exclude=.env"
+              - "--exclude=tests"
+              - "--exclude=test_*.sh"
+              - "--exclude=test_*.py"
+          tags: [sync]
+
+        - name: Sync deploy configuration to server
+          ansible.posix.synchronize:
+            src: "{{ playbook_dir }}/../"
+            dest: "{{ deploy_dir }}/"
+            delete: true
+            recursive: true
+            rsync_opts:
+              - "--exclude=.env"
+              - "--exclude=group_vars/vault.yml"
+              - "--exclude=*.example"
+          tags: [sync]
+
+        # ── Step 2: Setup Environment ────────────────────────────────
+        - name: Generate production .env file
+          ansible.builtin.template:
+            src: "{{ playbook_dir }}/../templates/env.production.j2"
+            dest: "{{ deploy_dir }}/.env"
+            owner: "{{ deploy_user }}"
+            group: "{{ deploy_group }}"
+            mode: "0600"
+          tags: [config]
+
+        # ── Step 3: Copy Firebase Credentials ────────────────────────
+        - name: Ensure storage directory exists on server
+          ansible.builtin.file:
+            path: "{{ backend_dir }}/storage"
+            state: directory
+            owner: "{{ deploy_user }}"
+            group: "{{ deploy_group }}"
+            mode: "0775"
+          tags: [config]
+
+        - name: Copy firebase credentials to server
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../../smaRT-backend/storage/firebase-credentials.json"
+            dest: "{{ backend_dir }}/storage/firebase-credentials.json"
+            owner: "{{ deploy_user }}"
+            group: "{{ deploy_group }}"
+            mode: "0600"
+          tags: [config]
+
+        # ── Step 4: Backup Current State ─────────────────────────────
+        - name: Check if containers are running
+          ansible.builtin.command: docker compose -f {{ deploy_dir }}/docker-compose.yml ps -q app
+          register: running_containers
+          changed_when: false
+          failed_when: false
+          tags: [backup]
+
+        - name: Tag current image for rollback
+          ansible.builtin.command: >
+            docker tag {{ docker_image_name }}:latest
+            {{ docker_image_name }}:rollback-{{ timestamp }}
+          when: running_containers.stdout != ""
+          changed_when: true
+          failed_when: false
+          tags: [backup]
+
+        - name: Backup database before deploy
+          ansible.builtin.shell: |
+            docker compose -f {{ deploy_dir }}/docker-compose.yml exec -T db \
+              mysqldump -u root -p"${DB_ROOT_PASSWORD}" --all-databases \
+              > {{ backup_dir }}/db-backup-{{ timestamp }}.sql
+          environment:
+            DB_ROOT_PASSWORD: "{{ vault_db_root_password }}"
+          when: running_containers.stdout != ""
+          changed_when: true
+          failed_when: false
+          tags: [backup]
+
+        - name: Clean old backups (keep last {{ keep_releases }})
+          ansible.builtin.shell: |
+            ls -t {{ backup_dir }}/db-backup-*.sql 2>/dev/null | tail -n +{{ keep_releases + 1 }} | xargs -r rm -f
+          changed_when: false
+          tags: [backup]
+
+        # ── Step 5: Build & Deploy ───────────────────────────────────
+        - name: Build Docker image
+          ansible.builtin.command: >
+            docker compose -f {{ deploy_dir }}/docker-compose.yml
+            build app
+          changed_when: true
+          tags: [build]
+
+        - name: Start/update containers
+          ansible.builtin.command: >
+            docker compose -f {{ deploy_dir }}/docker-compose.yml
+            up -d --force-recreate --remove-orphans
+          changed_when: true
+          tags: [deploy]
+
+        - name: Wait for containers to be ready
+          ansible.builtin.pause:
+            seconds: 15
+          tags: [deploy]
+
+        # ── Step 6: Post-deploy Tasks ────────────────────────────────
+        - name: Run database migrations
+          ansible.builtin.command: >
+            docker compose -f {{ deploy_dir }}/docker-compose.yml
+            exec -T app php artisan migrate --force
+          register: migration_result
+          changed_when: "'Migrating' in migration_result.stdout"
+          tags: [migrate]
+
+        - name: Display migration result
+          ansible.builtin.debug:
+            msg: "{{ migration_result.stdout_lines }}"
+          when: migration_result is defined
+          tags: [migrate]
+
+        # ── Step 7: Health Check ─────────────────────────────────────
+        - name: Health check — verify app is responding
+          ansible.builtin.uri:
+            url: "{{ health_check_url }}"
+            method: GET
+            status_code: 200
+            timeout: 10
+          register: health_check
+          retries: "{{ health_check_retries }}"
+          delay: "{{ health_check_delay }}"
+          until: health_check.status == 200
+          tags: [healthcheck]
+
+        # ── Step 8: Cleanup ──────────────────────────────────────────
+        - name: Prune unused Docker images
+          ansible.builtin.command: docker image prune -f
+          changed_when: true
+          tags: [cleanup]
+
+        - name: Clean old rollback images (keep last {{ keep_releases }})
+          ansible.builtin.shell: |
+            docker images --format '{{"{{"}}.Repository{{"}}"}}:{{"{{"}}.Tag{{"}}"}}' | grep '^{{ docker_image_name }}:rollback-' | sort -r | tail -n +{{ keep_releases + 1 }} | xargs -r docker rmi || true
+          changed_when: false
+          tags: [cleanup]
+
+        - name: Display deployment success
+          ansible.builtin.debug:
+            msg: |
+              ╔══════════════════════════════════════╗
+              ║  ✅ Deployment Successful!            ║
+              ║  App: {{ health_check_url }}          ║
+              ╚══════════════════════════════════════╝
+          tags: [always]
+
+      # ── Rollback on Failure ──────────────────────────────────────
+      rescue:
+        - name: "🚨 Deployment FAILED — Initiating rollback"
+          ansible.builtin.debug:
+            msg: "Deployment failed! Rolling back to previous version..."
+
+        - name: Rollback to previous image
+          ansible.builtin.command: >
+            docker tag {{ docker_image_name }}:rollback-{{ timestamp }}
+            {{ docker_image_name }}:latest
+          changed_when: true
+          failed_when: false
+
+        - name: Restart with previous image
+          ansible.builtin.command: >
+            docker compose -f {{ deploy_dir }}/docker-compose.yml
+            up -d --force-recreate app
+          changed_when: true
+          failed_when: false
+
+        - name: Fail the playbook
+          ansible.builtin.fail:
+            msg: |
+              ╔══════════════════════════════════════╗
+              ║  ❌ Deployment FAILED                 ║
+              ║  Rollback has been applied.           ║
+              ║  Check logs: make logs               ║
+              ╚══════════════════════════════════════╝
