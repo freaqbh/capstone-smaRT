@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: 'https://smart-api.alfaruqiabhi111.workers.dev/api',
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
