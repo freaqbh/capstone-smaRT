@@ -27,9 +27,6 @@ onMounted(async () => {
 
 <template>
   <div class="overview">
-    <!-- Alert Banner -->
-    <AlertBanner class="animate-fade-in-up delay-1" />
-
     <!-- Section: Ringkasan -->
     <div class="section-header animate-fade-in-up delay-2">
       <h2 class="section-title">ringkasan hari ini</h2>
