@@ -1,7 +1,9 @@
 import axios from 'axios'
 
+const API_BASE = 'https://api.smart-rt.cloud'
+
 const api = axios.create({
-  baseURL: 'https://api.smart-rt.cloud/api',
+  baseURL: `${API_BASE}/api`,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -180,3 +182,7 @@ export const fcmApi = {
   },
 }
 
+// ─── Storage URL Helper ──────────────────────────────────
+export function getStorageUrl(path: string): string {
+  return `${API_BASE}/storage/${path}`
+}

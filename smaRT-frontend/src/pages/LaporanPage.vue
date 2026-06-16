@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { laporanApi } from '@/services/api'
+import { laporanApi, getStorageUrl } from '@/services/api'
 
 const laporanList = ref<any[]>([])
 const loading = ref(true)
@@ -53,7 +53,7 @@ function openDetail(laporan: any) {
 }
 
 function getFileUrl(path: string) {
-  return `http://localhost:8000/storage/${path}`
+  return getStorageUrl(path)
 }
 
 // ─── Helpers ────────────────────────────────────────────

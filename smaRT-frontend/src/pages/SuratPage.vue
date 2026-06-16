@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { suratApi } from '@/services/api'
+import { suratApi, getStorageUrl } from '@/services/api'
 
 const suratList = ref<any[]>([])
 const loading = ref(true)
@@ -25,7 +25,7 @@ const reviewFile = ref<File | null>(null)
 const submitLoading = ref(false)
 
 function getFileUrl(path: string) {
-  return `http://localhost:8000/storage/${path}`
+  return getStorageUrl(path)
 }
 
 function openReview(s: any, status: 'APPROVED' | 'REJECTED') {
